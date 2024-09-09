@@ -1,11 +1,12 @@
 "use client";
-import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { IoMdDownload } from "react-icons/io";
 import { FaEnvelope } from "react-icons/fa"; // Import mail icon
+import { CSVLink } from "react-csv"; // Import CSV link for download
 import showTedxToast from "@components/showTedxToast";
 import { ScaleLoader } from "react-spinners";
 import { useRouter } from "next/navigation";
+
 interface BookingGroup {
   _id: string;
   firstName: string;
@@ -16,6 +17,8 @@ interface BookingGroup {
   food: "veg" | "non-veg";
   checkedIn: boolean;
   isStudent: boolean;
+  isSponsor: boolean;
+  NGOTickets: boolean;
   ticketId: string;
 }
 
@@ -27,6 +30,7 @@ interface Booking {
   referal_code?: string;
   count: number;
   amount: number;
+  NGOTickets: boolean;
   confirmationMailSent: boolean;
   group: BookingGroup[];
   createdAt: string;
@@ -35,17 +39,47 @@ interface Booking {
 
 const Purchased: React.FC = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]); // State for filtered bookings
+  const [filteredBookings, setFilteredBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [ticketStatus, setTicketStatus] = useState<{ ticketSold?: number }[]>(
-    []
-  );
-  console.log(bookings)
-  console.log(bookings);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc"); // Default sort order
-  const [searchQuery, setSearchQuery] = useState<string>(""); // State for search query
+  const [ticketStatus, setTicketStatus] = useState<{ ticketSold?: number }[]>([]);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [searchQuery, setSearchQuery] = useState<string>("");
   const router = useRouter();
+
+  const ticketPrices = [75000, 100000, 105000, 50000, 150000, 120000, 0];
+
+  const getTicketCounts = () => {
+    const counts: { [key: number]: number } = {};
+    let totalCount = 0;
+
+    filteredBookings.forEach((booking) => {
+      const pricePerPerson = booking.amount / booking.group.length;
+      ticketPrices.forEach((price) => {
+        const count = booking.group.filter(
+          (person) => pricePerPerson === price
+        ).length;
+
+        if (count > 0) {
+          counts[price] = (counts[price] || 0) + count;
+          totalCount += count;
+        }
+      });
+    });
+
+    return { counts, totalCount };
+  };
+
+  const { counts, totalCount } = getTicketCounts();
+
+  const countOrderBookings = () => {
+    return filteredBookings.filter(booking => booking.orderId.startsWith("order_"));
+  };
+
+  const orderBookings = countOrderBookings();
+  const orderBookingsCount = orderBookings.length;
+  const totalOrderAmount = orderBookings.reduce((sum, booking) => sum + booking.amount, 0);
+
   const fetchBookings = async () => {
     try {
       const response = await fetch("/api/admin/purchased-list", {
@@ -54,14 +88,13 @@ const Purchased: React.FC = () => {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
         },
-        body: JSON.stringify({ sortOrder }), // Pass sortOrder in the request body
+        body: JSON.stringify({ sortOrder }),
         cache: "no-store",
       });
       if (response.ok) {
         const data = await response.json();
-
         setBookings(data.bookings || []);
-        setFilteredBookings(data.bookings || []); // Initialize filtered bookings
+        setFilteredBookings(data.bookings || []);
         setTicketStatus(data.ticketStatus || []);
       } else {
         const result = await response.json();
@@ -76,9 +109,8 @@ const Purchased: React.FC = () => {
 
   useEffect(() => {
     fetchBookings();
-  }, [sortOrder]); // Re-fetch data when sortOrder changes
+  }, [sortOrder]);
 
-  // Filter bookings based on search query
   useEffect(() => {
     if (searchQuery === "") {
       setFilteredBookings(bookings);
@@ -158,6 +190,42 @@ const Purchased: React.FC = () => {
     }
   };
 
+  const checkInPerson = async (personId: string) => {
+    try {
+      const response = await fetch(`/api/admin/checkin/${personId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      if (response.ok) {
+        showTedxToast({
+          type: "success",
+          message: "Checked In Successfully",
+        });
+        fetchBookings(); // Refresh bookings after check-in
+      } else {
+        showTedxToast({
+          type: "error",
+          message: "Check-In failed",
+        });
+      }
+    } catch (error) {
+      showTedxToast({
+        type: "error",
+        message: "An error occurred during check-in",
+      });
+    }
+  };
+
+  const csvData = () => {
+    return [
+      ["Price", "Count"],
+      ...Object.entries(counts).map(([price, count]) => [price, count]),
+      ["Total Tickets", totalCount],
+    ];
+  };
+
   if (loading) {
     return (
       <div className="w-full h-full items-center justify-center flex">
@@ -172,150 +240,99 @@ const Purchased: React.FC = () => {
 
   return (
     <div className="p-4 bg-black-100 text-white">
+      {/* Count and total amount of bookings with order ID starting with "order_" */}
       <div className="mb-6 bg-black-200 text-white rounded-lg shadow-lg p-4">
-        <h1 className="text-2xl font-bold mb-4">Statistics</h1>
+        <h1 className="text-2xl font-bold mb-4">Bookings Starting with "order_"</h1>
+        <p className="text-xl font-semibold">Total Count: {orderBookingsCount}</p>
+        <p className="text-xl font-semibold">Total Amount: {formatAmount(totalOrderAmount)}</p>
+      </div>
+
+      {/* Ticket status section */}
+      <div className="mb-6 bg-black-200 text-white rounded-lg shadow-lg p-4">
+        <h1 className="text-2xl font-bold mb-4">Ticket Prices & Counts</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          <div className="bg-primary-700 p-4 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold">Total Bookings</h3>
-            <p className="text-3xl font-bold">{totalBookings || 0}</p>
-          </div>
-          <div className="bg-primary-700 p-4 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold">Total Amount Received</h3>
-            <p className="text-3xl font-bold font-sans">
-              {formatAmount(totalAmount)}.00
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-4 flex flex-wrap gap-5">
-        {/* Search Bar */}
-        <input
-          type="text"
-          placeholder="Search..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="p-2 bg-black-300 placeholder-white text-white rounded w-full md:w-1/3 outline-none border-none"
-        />
-        <div>
-          <label htmlFor="sortOrder" className="mr-2">
-            Sort Order:
-          </label>
-          <select
-            id="sortOrder"
-            value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value as "asc" | "desc")}
-            className="p-2 bg-black-300 text-white rounded outline-none border-none"
-          >
-            <option value="desc">Descending</option>
-            <option value="asc">Ascending</option>
-          </select>
-        </div>
-      </div>
-
-      <h1 className="text-2xl font-bold mb-4">Purchased Bookings</h1>
-      {filteredBookings.length > 0 ? (
-        <ul>
-          {filteredBookings.map((booking, index) => (
-            <li key={index} className="mb-4 border-b border-gray-600 pb-2">
-              <h3 className="text-xl font-semibold">{booking.orderId}</h3>
-              <p>
-                <strong>User ID:</strong> {booking.userId}
-              </p>
-              <p className="font-sans">
-                <strong>Amount:</strong> {formatAmount(booking.amount)}
-              </p>
-              <p>
-                <strong>Count:</strong> {booking.count}
-              </p>
-              <h3 className="text-lg font-semibold mt-2">Group Details:</h3>
-              <ul>
-                {booking.group.map((person) => (
-                  <li
-                    key={person.ticketId}
-                    className="border border-gray-700 p-2 mb-2 rounded flex justify-between items-center"
-                  >
-                    <div>
-                      <p>
-                        <strong>Name:</strong> {person.firstName}{" "}
-                        {person.lastName}
-                      </p>
-                      <p>
-                        <strong>Email:</strong> {person.email}
-                      </p>
-                      <p>
-                        <strong>Organisation:</strong> {person.organisation}
-                      </p>
-                      <p>
-                        <strong>Designation:</strong> {person.designation}
-                      </p>
-                      <p>
-                        <strong>Food preference:</strong> {person.food}
-                      </p>
-                      <p>
-                        <strong>Checked In:</strong>{" "}
-                        {person.checkedIn ? "Yes" : "No"}
-                      </p>
-                      <p>
-                        <strong>Student:</strong>{" "}
-                        {person.isStudent ? "Yes" : "No"}
-                      </p>
-                      <p className="font-sans">
-                        <strong>Ticket ID:</strong> {person.ticketId}
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <Link
-                        className="bg-[#eb0028] font-semibold text-xl text-white w-[10vw] p-3 rounded-[10px] flex flex-row items-center justify-center gap-2"
-                        target="_blank"
-                        href={`/tickets/${booking._id}/${person._id}`}
-                      >
-                        <IoMdDownload className="font-semibold text-xl" />{" "}
-                        Download
-                      </Link>
-                      {!booking?.confirmationMailSent && (
-                        <button
-                          onClick={() =>
-                            sendMail(
-                              person.email,
-                              person?.firstName,
-                              person?.lastName,
-                              booking._id,
-                              person._id
-                            )
-                          }
-                          className="bg-blue-500 font-semibold text-xl text-white w-[10vw] p-3 rounded-[10px] flex flex-row items-center justify-center gap-2"
-                        >
-                          <FaEnvelope className="font-semibold text-xl" /> Send
-                          Mail
-                        </button>
-                      )}
-                      {person?.checkedIn ? (
-                        <button
-                          className="bg-green-500 font-semibold text-xl text-white w-[10vw] p-3 rounded-[10px] flex flex-row items-center justify-center gap-2"
-                        >
-                          CheckedIn
-                        </button>
-                      ) : (
-                        <button
-                        onClick={() =>
-                          router.push(`/admin/check-qr/${person.ticketId}`)
-                        }
-                          className="bg-blue-500 font-semibold text-xl text-white w-[10vw] p-3 rounded-[10px] flex flex-row items-center justify-center gap-2"
-                        >
-                          Check In
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </li>
+          {ticketPrices.map((price) => (
+            <div key={price} className="bg-primary-700 p-4 rounded-lg shadow-md">
+              <h3 className="text-xl font-semibold">Price: ₹{price}</h3>
+              <p className="text-3xl font-bold">{counts[price] || 0}</p>
+            </div>
           ))}
-        </ul>
-      ) : (
-        <p>No bookings found.</p>
-      )}
+          <div className="bg-primary-700 p-4 rounded-lg shadow-md">
+            <h3 className="text-xl font-semibold">Total Tickets</h3>
+            <p className="text-3xl font-bold">{totalCount}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 bg-black-200 text-white rounded-lg shadow-lg p-4">
+        <h1 className="text-2xl font-bold mb-4">Total Amount</h1>
+        <p className="text-2xl font-bold">{formatAmount(totalAmount)}</p>
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between">
+        <div>
+          <h3 className="text-xl font-semibold">Total Amount</h3>
+          <p className="text-2xl font-bold">{formatAmount(totalAmount)}</p>
+        </div>
+        <div>
+          <CSVLink data={csvData()} filename={"ticket_counts.csv"}>
+            <button className="flex items-center bg-primary-700 p-2 rounded-md text-white">
+              <IoMdDownload className="mr-2" />
+              Download CSV
+            </button>
+          </CSVLink>
+        </div>
+      </div>
+
+      {/* Render filtered bookings */}
+      <div className="bg-black-200 text-white rounded-lg shadow-lg p-4">
+        <h1 className="text-2xl font-bold mb-4">Bookings List</h1>
+        {filteredBookings.length > 0 ? (
+          <ul>
+            {filteredBookings.map((booking) => (
+              <li key={booking._id} className="mb-4">
+                <h2 className="text-xl font-semibold">Order ID: {booking.orderId}</h2>
+                <p>User ID: {booking.userId}</p>
+                <p>Amount: {formatAmount(booking.amount)}</p>
+                {booking.group.map((person) => (
+                  <div key={person._id} className="bg-black-300 p-2 rounded-md my-2">
+                    <h3 className="text-lg font-semibold">
+                      {person.firstName} {person.lastName}
+                    </h3>
+                    <p>Email: {person.email}</p>
+                    <p>Ticket ID: {person.ticketId}</p>
+                    <button
+                      onClick={() =>
+                        sendMail(
+                          person.email,
+                          person.firstName,
+                          person.lastName,
+                          booking._id,
+                          person._id
+                        )
+                      }
+                      className="flex items-center bg-primary-700 p-2 rounded-md text-white mt-2"
+                    >
+                      <FaEnvelope className="mr-2" />
+                      Send Mail
+                    </button>
+                    {!person.checkedIn && (
+                      <button
+                        onClick={() => checkInPerson(person._id)}
+                        className="flex items-center bg-primary-700 p-2 rounded-md text-white mt-2"
+                      >
+                        Check In
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No bookings found.</p>
+        )}
+      </div>
     </div>
   );
 };

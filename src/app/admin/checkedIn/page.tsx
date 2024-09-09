@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState, ChangeEvent } from "react";
+import { ScaleLoader } from "react-spinners"; // Spinner for loading state
 
 interface Member {
   firstName: string;
@@ -16,6 +17,7 @@ interface Member {
 interface Booking {
   userId: string;
   amount: number;
+  NGOTickets: boolean;
   count: number;
   group: Member[];
 }
@@ -24,18 +26,17 @@ const Page = () => {
   const [checkedInUsers, setCheckedInUsers] = useState<Booking[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<Booking[]>([]);
   const [totalBookings, setTotalBookings] = useState<number>(0);
-  const [totalAmount, setTotalAmount] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<"Ascending" | "Descending">(
     "Descending"
   );
+  const [loading, setLoading] = useState<boolean>(true); // Loading state
 
   useEffect(() => {
     fetchCheckedIn();
   }, []);
 
   useEffect(() => {
-    // Filter and sort the users based on the search term and sort order
     const filtered = checkedInUsers.filter((booking) =>
       booking.group.some(
         (member) =>
@@ -43,12 +44,13 @@ const Page = () => {
           member.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           member.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
           member.ticketId
-          .slice(14, member.ticketId.length)
-          .toLowerCase()
-          .includes(searchTerm.toLowerCase())
+            .slice(14, member.ticketId.length) // Extracting relevant part of ticket ID
+            .toLowerCase()
+            .includes(searchTerm.toLowerCase())
       )
     );
 
+    // Sort the filtered users
     const sorted = filtered.sort((a, b) => {
       const aTicketId = a.group[0].ticketId;
       const bTicketId = b.group[0].ticketId;
@@ -61,19 +63,29 @@ const Page = () => {
   }, [searchTerm, sortOrder, checkedInUsers]);
 
   const fetchCheckedIn = async () => {
-    const response = await fetch("/api/admin/purchased-list/checkIn/fetch");
-    const data: Booking[] = await response.json();
+    setLoading(true); // Set loading to true before fetching
+    try {
+      const response = await fetch("/api/admin/purchased-list/checkIn/fetch", {
+        method: "POST", // Changed to POST method
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sortOrder: sortOrder === "Ascending" ? "asc" : "desc", // Send sort order
+        }),
+      });
+      const data: Booking[] = await response.json();
 
-    setCheckedInUsers(data);
-    setFilteredUsers(data);
+      setCheckedInUsers(data);
+      setFilteredUsers(data);
 
-    // Calculate total count and amount
-    setTotalBookings(data.length);
-    const totalAmountInPaise = data.reduce(
-      (acc, booking) => acc + booking.amount,
-      0
-    );
-    setTotalAmount(totalAmountInPaise / 100); // Convert to rupees
+      // Calculate total count
+      setTotalBookings(data.length);
+    } catch (error) {
+      console.error("Failed to fetch data", error);
+    } finally {
+      setLoading(false); // Set loading to false after fetching
+    }
   };
 
   const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -85,85 +97,97 @@ const Page = () => {
   };
 
   return (
-    <div className="bg-black min-h-screen block p-8 text-white">
+    <div className="bg-black-100 min-h-screen block p-8 text-white">
       {/* Header with stats */}
-      <div className="flex justify-between items-center mb-8">
-        <div className="bg-red-600 p-4 rounded text-center w-1/3">
-          <h3 className="text-2xl font-bold">Total Check In</h3>
-          <p className="text-4xl font-bold">{totalBookings}</p>
-        </div>
-        <div className="bg-red-600 p-4 rounded text-center w-1/3">
-          <h3 className="text-2xl font-bold">Total Amount</h3>
-          <p className="text-4xl font-bold">₹{totalAmount.toFixed(2)}</p>
+      <div className="flex justify-center mb-8">
+        <div className="bg-gradient-to-r from-red-500 to-red-800 p-6 rounded-lg text-center shadow-lg w-full max-w-xs">
+          <h3 className="text-2xl font-extrabold">Total Check In</h3>
+          <p className="text-4xl font-extrabold mt-2">{totalBookings}</p>
         </div>
       </div>
 
       {/* Search and Sort */}
-      <div className="flex mb-4">
+      <div className="flex mb-4 justify-center">
         <input
           type="text"
-          placeholder="Search..."
-          className="p-2 rounded placeholder-white bg-black-400 text-white w-full text-black"
+          placeholder="Search by name, email, or ticket ID..."
+          className="p-3 rounded-lg placeholder-gray-400 bg-gray-800 text-white w-1/2 border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600"
           value={searchTerm}
           onChange={handleSearchChange}
         />
         <select
-          className="ml-4 p-2 rounded bg-black-400 text-white text-black"
+          className="ml-4 p-3 rounded-lg bg-gray-800 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-red-600"
           value={sortOrder}
           onChange={handleSortChange}
         >
-          <option value="Descending">Descending</option>
-          <option value="Ascending">Ascending</option>
+          <option value="Descending">Sort: Descending</option>
+          <option value="Ascending">Sort: Ascending</option>
         </select>
       </div>
 
-      {/* Bookings List */}
-      <div>
-        <h3 className="text-2xl font-bold mb-4">Purchased Bookings</h3>
-        {filteredUsers.map((booking, index) => (
-          <div key={index} className="p-4 rounded mb-4">
-            <h3 className="font-bold">By Manual</h3>
-            <p>
-              <strong>User ID:</strong> {booking.userId}
-            </p>
-            <p>
-              <strong>Amount:</strong> ₹{(booking.amount / 100).toFixed(2)}
-            </p>
-            <p>
-              <strong>Count:</strong> {booking.count}
-            </p>
-            <h4 className="mt-4 font-bold">Group Details:</h4>
-            {booking.group.map((member, index) => (
-              <div key={index} className="bg-primary-950 p-4 rounded mt-2">
-                <p>
-                  <strong>Name:</strong> {member.firstName} {member.lastName}
-                </p>
-                <p>
-                  <strong>Email:</strong> {member.email}
-                </p>
-                <p>
-                  <strong>Organisation:</strong> {member.organisation}
-                </p>
-                <p>
-                  <strong>Designation:</strong> {member.designation}
-                </p>
-                <p>
-                  <strong>Food preference:</strong> {member.food}
-                </p>
-                <p>
-                  <strong>Checked In:</strong> {member.checkedIn ? "Yes" : "No"}
-                </p>
-                <p>
-                  <strong>Student:</strong> {member.isStudent ? "Yes" : "No"}
-                </p>
-                <p>
-                  <strong>Ticket ID:</strong> {member.ticketId}
-                </p>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      {/* Loading state */}
+      {loading ? (
+        <div className="flex justify-center mt-16">
+          <ScaleLoader color="#eb0028" /> {/* Show a spinner while loading */}
+        </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="text-center text-xl text-gray-400 mt-16">
+          No checked-in users found.
+        </div>
+      ) : (
+        /* Bookings List */
+        <div>
+          <h3 className="text-3xl font-bold mb-4 text-center">Check-In List</h3>
+          {filteredUsers.map((booking, index) => (
+            <div
+              key={index}
+              className="bg-black-200 p-6 rounded-lg mb-4 shadow-md"
+            >
+              <h3 className="font-bold text-lg">Booking ID: {booking.userId}</h3>
+              <p className="text-sm text-gray-400">
+                <strong>Total Tickets:</strong> {booking.count}
+              </p>
+              <p className="text-sm text-gray-400">
+                <strong>NGO Tickets:</strong> {booking.NGOTickets ? "Yes" : "No"}
+              </p>
+
+              <h4 className="mt-4 text-xl font-bold">Group Members:</h4>
+              {booking.group.map((member, idx) => (
+                <div
+                  key={idx}
+                  className="bg-gray-900 p-4 rounded-lg mt-2 shadow-inner"
+                >
+                  <p className="text-gray-300">
+                    <strong>Name:</strong> {member.firstName} {member.lastName}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Email:</strong> {member.email}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Organisation:</strong> {member.organisation}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Designation:</strong> {member.designation}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Food preference:</strong> {member.food}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Checked In:</strong>{" "}
+                    {member.checkedIn ? "Yes" : "No"}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Student:</strong> {member.isStudent ? "Yes" : "No"}
+                  </p>
+                  <p className="text-gray-300">
+                    <strong>Ticket ID:</strong> {member.ticketId}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

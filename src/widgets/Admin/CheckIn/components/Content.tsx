@@ -15,6 +15,9 @@ interface GroupMember {
 }
 
 interface TicketData {
+  ticket: {
+    NGOTickets: boolean;
+  };
   amount: number;
   groupMember: GroupMember;
 }
@@ -26,7 +29,7 @@ export default function Content() {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [data, setData] = useState<TicketData | null>(null); // Define state with a type
   const [loading, setLoading] = useState<boolean>(true); // Loader state
-const router = useRouter();
+  const router = useRouter();
   useEffect(() => {
     fetchData();
   }, []);
@@ -67,7 +70,7 @@ const router = useRouter();
           message: "Successfully checked in",
         });
         setTimeout(() => {
-          router.push('/admin/checkedIn')
+          router.push("/admin/checkedIn");
         }, 500);
       } else {
         showTedxToast({
@@ -115,6 +118,16 @@ const router = useRouter();
             <p className="text-lg text-white mb-4">
               <span className="font-semibold">Is Student: </span>
               {data.groupMember.isStudent ? "Yes" : "No"}
+            </p>
+            <p className="text-lg text-white mb-4">
+              <span className="font-semibold">Is NGO Tickets: </span>
+              {data.ticket.NGOTickets ? (
+                <span className="ml-2 px-3 py-1 text-xs font-semibold bg-green-800 text-white rounded-full">
+                  NGO
+                </span>
+              ) : (
+                "No"
+              )}
             </p>
             <p className="text-lg text-white mb-4">
               <span className="font-semibold">Amount: </span>

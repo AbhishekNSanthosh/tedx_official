@@ -25,6 +25,10 @@ const BookingSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    NGOTickets:{
+      type: Boolean,
+      default: false,
+    },
     confirmationMailSent: {
       type: Boolean,
       default: false,

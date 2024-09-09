@@ -39,7 +39,7 @@ export const GET = async (request: Request, { params }: { params: Params }) => {
       return new Response(JSON.stringify({ message: "Ticket not found in group" }), { status: 404 });
     }
     const amount = ticket.amount / 100;
-    return new Response(JSON.stringify({ groupMember, amount }), { status: 200 });
+    return new Response(JSON.stringify({ groupMember, amount,ticket }), { status: 200 });
 
   } catch (err) {
     // Handle any errors
