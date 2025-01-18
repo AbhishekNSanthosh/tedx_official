@@ -79,6 +79,9 @@ const router  = useRouter();
           </Link>{" "}
           <Button
             title="Logout"
+            onClick={()=>{
+              signOut()
+            }}
             position="left"
             icon={<MdLogout />}
             className="flex items-center gap-2 justify-center border border-primary-700 text-primary-700 py-2 w-[12rem] rounded-[10px] text-xl"
